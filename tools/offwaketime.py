@@ -73,6 +73,8 @@ parser.add_argument("-d", "--delimited", action="store_true",
     help="insert delimiter between kernel/user stacks")
 parser.add_argument("-f", "--folded", action="store_true",
     help="output folded format")
+parser.add_argument("-c", "--counter-units", type=str, choices=['us', 'wakeups'],
+    default='us', help="units for the counts")
 parser.add_argument("--stack-storage-size", default=1024,
     type=positive_nonzero_int,
     help="the number of unique stack traces that can be stored and "
@@ -97,6 +99,11 @@ def signal_ignore(signal, frame):
     print()
 
 # define BPF program
+if args.counter_units == 'us':
+    bpf_count_code = 'delta'
+else:
+    bpf_count_code = '1'
+
 bpf_text = """
 #include <uapi/linux/ptrace.h>
 #include <linux/sched.h>
@@ -191,10 +198,10 @@ int oncpu(struct pt_regs *ctx, struct task_struct *p) {
     }
 
     val = counts.lookup_or_init(&key, &zero);
-    (*val) += delta;
+    (*val) += %(bpf_count_code)s;
     return 0;
 }
-"""
+""" % locals()
 
 # set thread filter
 thread_context = ""
